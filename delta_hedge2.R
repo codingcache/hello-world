@@ -3,7 +3,7 @@ library(fOptions)
 library(lubridate)
 library(xts)
 library(dygraphs)
-iron3min <- read.csv("iron3min.csv", stringsAsFactors = F)
+iron3min <- read.csv("hedge/iron3min.csv", stringsAsFactors = F)
 
 #将数据按合约拆分，筛选出整数、半点数据
 contract = list()
@@ -26,7 +26,7 @@ for (i in 1:8){
   pin[[i]] = contract[[i]][,1] > DateTr[i] & contract[[i]][,1] <= DateTr[i+1] & minute(contract[[i]][,1])==3 & hour(contract[[i]][,1])==21
   pin[[i]] = which(pin[[i]])
 }
-#contract[[3]][pin[[3]][2],] %>% view()
+#contract[[1]][pin[[3]][1],] %>% View()
 
 
 #计算日内时间间隔相对于一天的百分比
@@ -39,7 +39,6 @@ fractionTime = (as.numeric(as.duration(intervalTime)/86400))%%1   #可能中间�
 sigOptionOpen = c()
 priceOptionOpen = c()
 deltaOptionOpen = c()
-sigOptionHolding = list()
 priceDayTimeList = list()
 pointDayTimeList = list()
 deltaDayTimeList = list()
@@ -50,22 +49,26 @@ for (i in 1:8) {   #i:不同合约
     
     pinForThisOne = pin[[i]][j]
     #先算option开仓的一个delta
-    sigOptionOpen[n] = (var(diff(log(contract[[i]][(((rep(pinForThisOne,21)-1)-(20:0)*21)), 3])))*243)^0.5
+    sigOptionOpen[n] = (var(diff(log(contract[[i]][(((rep(pinForThisOne,20)-1)-(19:0)*21)), 3])))*243)^0.5       ##################调整公式21天改20天
     priceOptionOpen[n] = contract[[i]][pinForThisOne, 2]
     deltaOptionOpen[n] = GBSGreeks(Selection = "Delta", TypeFlag = "c", S = priceOptionOpen[n], X = priceOptionOpen[n], Time = 19.7479167/243, r = 0.03, b = 0, sigOptionOpen[n])
     
     #再算option随时间变化、不同时点对冲的delta
-    sigOptionHolding = matrix(ncol = 1, nrow = 20)   #初始化声明变量
+    #sigOptionHolding = matrix(ncol = 1, nrow = 20)   #初始化声明变量
     priceDayTime = matrix(ncol = 21, nrow = 20)
     pointDayTime = data.frame(contract[[1]][1,1])
     deltaDayTime = matrix(ncol = 21, nrow = 20)
-    for (k in 1:20) {   #k: 交易后的第几日。每种时间点再算19个delta,19天（最后一个平仓不算）
-      sigOptionHolding[k] = (var(diff(log(contract[[i]][(((rep((pinForThisOne+k*21),21)-1)-(21:1)*21)), 3])))*243)^0.5
+    for (k in 1:20) {   #k: 交易后的第几日。每种时间点再算20个delta,20天（最后一个平仓不算）
+      #sigOptionHolding[k] = (var(diff(log(contract[[i]][(((rep((pinForThisOne+k*21),20)-1)-(20:1)*21)), 3])))*243)^0.5      ########################不计算每天sigma，只用sigOptionOpen[n]代替
       #需要sigma，收盘价格
       for (h in 1:21) {    #h: 期货可以在21个不同时间点对冲 
-        priceDayTime[k, h] = contract[[i]][pinForThisOne+(k-1)*21+(h-1),2]
+        if (h==1) {                                                                     ######################非21:03对冲改用收盘价
+          priceDayTime[k, h] = contract[[i]][pinForThisOne+(k-1)*21+(h-1),2] 
+        }else {
+          priceDayTime[k, h] = contract[[i]][pinForThisOne+(k-1)*21+(h-1),3]
+        }
         pointDayTime[k, h] = contract[[i]][pinForThisOne+(k-1)*21+(h-1),1]
-        deltaDayTime[k, h] = GBSGreeks(Selection = "Delta", TypeFlag = "c", S = priceDayTime[k, h], X = priceOptionOpen[n], Time = (20-k+fractionTime[h])/243, r = 0.03, b = 0, sigOptionHolding[k])
+        deltaDayTime[k, h] = GBSGreeks(Selection = "Delta", TypeFlag = "c", S = priceDayTime[k, h], X = priceOptionOpen[n], Time = (20-k+fractionTime[h])/243, r = 0.03, b = 0, sigOptionOpen[n])        ##################计算delta时改用sigOptionOpen[n]
       }
     }
     priceDayTimeList[[n]] = priceDayTime
@@ -99,6 +102,7 @@ for (i in 1:614) {
   
   payoffFutures[i,] = (-apply(positionFutures*priceFutures, 2, sum) - 0.0001*apply(abs(positionFutures), 2, sum))*100
   
+  #分时点列出期货交易头寸（奇数行）、交易价格（偶数行），每笔总payoff（奇数行最后一列），每笔期货价格波动率（偶数行最后一列）（在dataPointDivided变量）
   for (j in 1:21) {
     if (i==1) {
       dataPointDivided[[j]] = matrix(nrow = 614*2, ncol = 23, dimnames = list(1:(614*2),1:23))
@@ -119,7 +123,7 @@ payoffOption = sapply(1:614, function(x) {priceDayTimeList[[x]][1,1]-priceDayTim
 payoffOption[payoffOption>0] = 0
 payoffFuturesTotal = apply(payoffFutures, 2, sum)
 payoffOptionTotal = sum(payoffOption)
-sort(payoffFuturesTotal, decreasing = T)
+
 
 payoffCombined = rbind(c(payoffFuturesTotal,payoffOptionTotal), cbind(payoffFutures, payoffOption))
 colnames(payoffCombined)[22] = "Option"; rownames(payoffCombined)[1] = "Total"
@@ -134,7 +138,7 @@ for (i in 1:21) {
   dataPointDividedFO[[i]][seq(1, 1228, 2), 23] = dataPointDividedFO[[i]][seq(1, 1228, 2), 23] + payoffOption
   volatilityFutures[,i] = dataPointDivided[[i]][seq(2, 1228, 2), 23]
 }
-
+sort(payoffCombinedFO[1,], decreasing = T)
 
 
 #-----------------------------------------------------------
