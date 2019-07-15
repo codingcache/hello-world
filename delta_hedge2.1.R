@@ -5,7 +5,7 @@ library(xts)
 library(dygraphs)
 iron3min <- read.csv("hedge/iron3min.csv", stringsAsFactors = F)
 
-#½«Êý¾Ý°´ºÏÔ¼²ð·Ö£¬É¸Ñ¡³öÕûÊý¡¢°ëµãÊý¾Ý
+#å°†æ•°æ®æŒ‰åˆçº¦æ‹†åˆ†ï¼Œç­›é€‰å‡ºæ•´æ•°ã€åŠç‚¹æ•°æ®
 contract = list()
 for (i in 1:8) {
   contract[[i]] = cbind(ymd_hm(iron3min[, (9-i)*5-4]), iron3min[, ((9-i)*5-3):((9-i)*5-2)]) %>% na.omit
@@ -16,12 +16,12 @@ for (i in 1:8) {
   contract[[i]] = contract[[i]][filtPin, ] %>% na.omit()
 }
 
-#ÁÐ³öÆÚÈ¨½»Ò×ÈÕÆÚÔÚcontract±äÁ¿ÖÐµÄÖ¸Õë
-DateTr = ymd_hm(c("2016-11-15 20:59", "2017-03-15 20:59", "2017-07-14 20:59", "2017-11-15 20:59", "2018-03-15 20:59", "2018-07-13 20:59", "2018-11-15 20:59", "2019-03-15 20:59", "2019-05-25 20:59"))  #×¢ÒâË«ÐÝÈÕ£¬¸ôÁ½Ìì
-pin = list()     #Ñ¡³ö½»Ò×ÆÚÈ¨µÄÈÕÆÚµÄÖ¸Õë
+#åˆ—å‡ºæœŸæƒäº¤æ˜“æ—¥æœŸåœ¨contractå˜é‡ä¸­çš„æŒ‡é’ˆ
+DateTr = ymd_hm(c("2016-11-15 20:59", "2017-03-15 20:59", "2017-07-14 20:59", "2017-11-15 20:59", "2018-03-15 20:59", "2018-07-13 20:59", "2018-11-15 20:59", "2019-03-15 20:59", "2019-05-25 20:59"))  #æ³¨æ„åŒä¼‘æ—¥ï¼Œéš”ä¸¤å¤©
+pin = list()     #é€‰å‡ºäº¤æ˜“æœŸæƒçš„æ—¥æœŸçš„æŒ‡é’ˆ
 # Index = list()  
-# contractIndex = list()   #É¸Ñ¡³ö½øÐÐ½»Ò×µÄÈÕÆÚµÄÊý¾Ý
-# IndexdateSplit = list()   #½»Ò×ÆÚÈ¨µÄÖ¸Õë
+# contractIndex = list()   #ç­›é€‰å‡ºè¿›è¡Œäº¤æ˜“çš„æ—¥æœŸçš„æ•°æ®
+# IndexdateSplit = list()   #äº¤æ˜“æœŸæƒçš„æŒ‡é’ˆ
 for (i in 1:8){
   pin[[i]] = contract[[i]][,1] > DateTr[i] & contract[[i]][,1] <= DateTr[i+1] & minute(contract[[i]][,1])==3 & hour(contract[[i]][,1])==21
   pin[[i]] = which(pin[[i]])
@@ -29,13 +29,13 @@ for (i in 1:8){
 #contract[[1]][pin[[3]][1],] %>% View()
 
 
-#¼ÆËãÈÕÄÚÊ±¼ä¼ä¸ôÏà¶ÔÓÚÒ»ÌìµÄ°Ù·Ö±È
-intervalTime = interval(contract[[1]][pin[[1]][1]:(pin[[1]][1]+20), 1], contract[[1]][(pin[[1]][1]+20), 1]) #µ÷²ÖµÄÊ±µãÓëµ±¸ö½»Ò×ÈÕ15:00µÄ¼ä¸ô
-fractionTime = (as.numeric(as.duration(intervalTime)/86400))%%1   #¿ÉÄÜÖÐ¼äË«ÐÝÈÕ£¬È¡Óà
+#è®¡ç®—æ—¥å†…æ—¶é—´é—´éš”ç›¸å¯¹äºŽä¸€å¤©çš„ç™¾åˆ†æ¯”
+intervalTime = interval(contract[[1]][pin[[1]][1]:(pin[[1]][1]+20), 1], contract[[1]][(pin[[1]][1]+20), 1]) #è°ƒä»“çš„æ—¶ç‚¹ä¸Žå½“ä¸ªäº¤æ˜“æ—¥15:00çš„é—´éš”
+fractionTime = (as.numeric(as.duration(intervalTime)/86400))%%1   #å¯èƒ½ä¸­é—´åŒä¼‘æ—¥ï¼Œå–ä½™
 
 
 #-----------------------------------
-#¼ÆËãÆÚÈ¨delta£¬Ã¿¸öËã20´Î£¬¼ÇÂ¼ÆÚ»õ¼Û¸ñ£¬ÆÚ»õÍ·´çµÈÓÚÇ°ºódelta±ä»¯£»ÔÙ·Ö²»Í¬Ê±¶Î¼ÆËã
+#è®¡ç®—æœŸæƒdeltaï¼Œæ¯ä¸ªç®—20æ¬¡ï¼Œè®°å½•æœŸè´§ä»·æ ¼ï¼ŒæœŸè´§å¤´å¯¸ç­‰äºŽå‰åŽdeltaå˜åŒ–ï¼›å†åˆ†ä¸åŒæ—¶æ®µè®¡ç®—
 sigOptionOpen = c()
 priceOptionOpen = c()
 deltaOptionOpen = c()
@@ -44,31 +44,31 @@ pointDayTimeList = list()
 deltaDayTimeList = list()
 n = 1
 
-for (i in 1:8) {   #i:²»Í¬ºÏÔ¼
-  for (j in 1:length(pin[[i]])) {  #j:²»Í¬ÈÕÆÚ¿ª²ÖÆÚÈ¨
+for (i in 1:8) {   #i:ä¸åŒåˆçº¦
+  for (j in 1:length(pin[[i]])) {  #j:ä¸åŒæ—¥æœŸå¼€ä»“æœŸæƒ
     
     pinForThisOne = pin[[i]][j]
-    #ÏÈËãoption¿ª²ÖµÄÒ»¸ödelta
-    sigOptionOpen[n] = (var(diff(log(contract[[i]][(((rep(pinForThisOne,20)-1)-(19:0)*21)), 3])))*243)^0.5       ##################µ÷Õû¹«Ê½21Ìì¸Ä20Ìì
+    #å…ˆç®—optionå¼€ä»“çš„ä¸€ä¸ªdelta
+    sigOptionOpen[n] = (var(diff(log(contract[[i]][(((rep(pinForThisOne,20)-1)-(19:0)*21)), 3])))*243)^0.5       ##################è°ƒæ•´å…¬å¼21å¤©æ”¹20å¤©
     priceOptionOpen[n] = contract[[i]][pinForThisOne, 2]
     deltaOptionOpen[n] = GBSGreeks(Selection = "Delta", TypeFlag = "c", S = priceOptionOpen[n], X = priceOptionOpen[n], Time = 19.7479167/243, r = 0.03, b = 0, sigOptionOpen[n])
     
-    #ÔÙËãoptionËæÊ±¼ä±ä»¯¡¢²»Í¬Ê±µã¶Ô³åµÄdelta
-    #sigOptionHolding = matrix(ncol = 1, nrow = 20)   #³õÊ¼»¯ÉùÃ÷±äÁ¿
+    #å†ç®—optionéšæ—¶é—´å˜åŒ–ã€ä¸åŒæ—¶ç‚¹å¯¹å†²çš„delta
+    #sigOptionHolding = matrix(ncol = 1, nrow = 20)   #åˆå§‹åŒ–å£°æ˜Žå˜é‡
     priceDayTime = matrix(ncol = 21, nrow = 20)
     pointDayTime = data.frame(contract[[1]][1,1])
     deltaDayTime = matrix(ncol = 21, nrow = 20)
-    for (k in 1:20) {   #k: ½»Ò×ºóµÄµÚ¼¸ÈÕ¡£Ã¿ÖÖÊ±¼äµãÔÙËã20¸ödelta,20Ìì£¨×îºóÒ»¸öÆ½²Ö²»Ëã£©
-      #sigOptionHolding[k] = (var(diff(log(contract[[i]][(((rep((pinForThisOne+k*21),20)-1)-(20:1)*21)), 3])))*243)^0.5      ########################²»¼ÆËãÃ¿Ììsigma£¬Ö»ÓÃsigOptionOpen[n]´úÌæ
-      #ÐèÒªsigma£¬ÊÕÅÌ¼Û¸ñ
-      for (h in 1:21) {    #h: ÆÚ»õ¿ÉÒÔÔÚ21¸ö²»Í¬Ê±¼äµã¶Ô³å 
-        if (h==1) {                                                                     ######################·Ç21:03¶Ô³å¸ÄÓÃÊÕÅÌ¼Û
+    for (k in 1:20) {   #k: äº¤æ˜“åŽçš„ç¬¬å‡ æ—¥ã€‚æ¯ç§æ—¶é—´ç‚¹å†ç®—20ä¸ªdelta,20å¤©ï¼ˆæœ€åŽä¸€ä¸ªå¹³ä»“ä¸ç®—ï¼‰
+      #sigOptionHolding[k] = (var(diff(log(contract[[i]][(((rep((pinForThisOne+k*21),20)-1)-(20:1)*21)), 3])))*243)^0.5      ########################ä¸è®¡ç®—æ¯å¤©sigmaï¼Œåªç”¨sigOptionOpen[n]ä»£æ›¿
+      #éœ€è¦sigmaï¼Œæ”¶ç›˜ä»·æ ¼
+      for (h in 1:21) {    #h: æœŸè´§å¯ä»¥åœ¨21ä¸ªä¸åŒæ—¶é—´ç‚¹å¯¹å†² 
+        if (h==1) {                                                                     ######################éž21:03å¯¹å†²æ”¹ç”¨æ”¶ç›˜ä»·
           priceDayTime[k, h] = contract[[i]][pinForThisOne+(k-1)*21+(h-1),2] 
         }else {
           priceDayTime[k, h] = contract[[i]][pinForThisOne+(k-1)*21+(h-1),3]
         }
         pointDayTime[k, h] = contract[[i]][pinForThisOne+(k-1)*21+(h-1),1]
-        deltaDayTime[k, h] = GBSGreeks(Selection = "Delta", TypeFlag = "c", S = priceDayTime[k, h], X = priceOptionOpen[n], Time = (20-k+fractionTime[h])/243, r = 0.03, b = 0, sigOptionOpen[n])        ##################¼ÆËãdeltaÊ±¸ÄÓÃsigOptionOpen[n]
+        deltaDayTime[k, h] = GBSGreeks(Selection = "Delta", TypeFlag = "c", S = priceDayTime[k, h], X = priceOptionOpen[n], Time = (20-k+fractionTime[h])/243, r = 0.03, b = 0, sigOptionOpen[n])        ##################è®¡ç®—deltaæ—¶æ”¹ç”¨sigOptionOpen[n]
       }
     }
     priceDayTimeList[[n]] = priceDayTime
@@ -80,29 +80,29 @@ for (i in 1:8) {   #i:²»Í¬ºÏÔ¼
 }
 
 
-#¼ÆËãÆÚ»õ½»Ò×¼Û¸ñµÄ²¨¶¯ÂÊ£¬Ã»½»Ò×µÄ¼Û¸ñÐèÒªÈ¥³ý
+#è®¡ç®—æœŸè´§äº¤æ˜“ä»·æ ¼çš„æ³¢åŠ¨çŽ‡ï¼Œæ²¡äº¤æ˜“çš„ä»·æ ¼éœ€è¦åŽ»é™¤
 VarComputingWithPosition = function(){
   pinOnVar = which(positionFutures[,j]!=0)
   (var(diff(log(priceFutures[pinOnVar,j])))*243)^0.5
 }
-#¼ÆËãÆÚ»õÍ·´ç¡¢payoff
+#è®¡ç®—æœŸè´§å¤´å¯¸ã€payoff
 payoffFutures = matrix(nrow = 614, ncol = 21)
 dataPointDivided = list()
 for (i in 1:614) {
   #futuresComputing[[i]] = data.frame(date = names(priceDayTimeList)[i], deltaOption = c(deltaOptionOpen[i], price))
-  deltaOption = rbind(deltaOptionOpen[i], deltaDayTimeList[[i]]) #Ã¿ÁÐÊÇ20ÌìµÄÆÚÈ¨delta£¬ÐÐ´ú±í²»Í¬¶Ô³åÊ±¼ä£»Ê×ÐÐ¼ÓÒ»ÐÐÊÇµÚÒ»±Ê½»Ò×µÄdelta
-  positionFutures = diff(deltaOption) #delta±ä»¯µÄ²î¶îÊÇ¼Ó²ÖµÄÍ·´ç
-  positionFutures[1, 1] = 0; positionFutures[20, 21] = 0  #µÚÒ»ÌìÆÚ»õºÍÆÚÈ¨Í¬Ê±¶Ô³å£¬×îºóÒ»ÌìÆÚÈ¨ÊÕÅÌÊ±²»ÔÙ¶Ô³å
-  positionFutures = rbind(deltaOptionOpen[i], positionFutures) #ÆÚÈ¨¿ª²ÖÏÈ¶Ô³åÒ»±Ê
-  positionFutures = rbind(positionFutures, -apply(positionFutures, 2, sum)) #×îºóÆ½²Ö
+  deltaOption = rbind(deltaOptionOpen[i], deltaDayTimeList[[i]]) #æ¯åˆ—æ˜¯20å¤©çš„æœŸæƒdeltaï¼Œè¡Œä»£è¡¨ä¸åŒå¯¹å†²æ—¶é—´ï¼›é¦–è¡ŒåŠ ä¸€è¡Œæ˜¯ç¬¬ä¸€ç¬”äº¤æ˜“çš„delta
+  positionFutures = diff(deltaOption) #deltaå˜åŒ–çš„å·®é¢æ˜¯åŠ ä»“çš„å¤´å¯¸
+  positionFutures[1, 1] = 0; positionFutures[20, 21] = 0  #ç¬¬ä¸€å¤©æœŸè´§å’ŒæœŸæƒåŒæ—¶å¯¹å†²ï¼Œæœ€åŽä¸€å¤©æœŸæƒæ”¶ç›˜æ—¶ä¸å†å¯¹å†²
+  positionFutures = rbind(deltaOptionOpen[i], positionFutures) #æœŸæƒå¼€ä»“å…ˆå¯¹å†²ä¸€ç¬”
+  positionFutures = rbind(positionFutures, -apply(positionFutures, 2, sum)) #æœ€åŽå¹³ä»“
   
-  priceFutures = rbind(priceOptionOpen[i], priceDayTimeList[[i]], priceDayTimeList[[i]][20, 21]) #¼ÓÉÏ¿ª²Ö¼ÛºÍÆ½²Ö¼Û
-  priceFutures[positionFutures > 0] = priceFutures[positionFutures > 0] + 0.5  #»¬µã
+  priceFutures = rbind(priceOptionOpen[i], priceDayTimeList[[i]], priceDayTimeList[[i]][20, 21]) #åŠ ä¸Šå¼€ä»“ä»·å’Œå¹³ä»“ä»·
+  priceFutures[positionFutures > 0] = priceFutures[positionFutures > 0] + 0.5  #æ»‘ç‚¹
   priceFutures[positionFutures < 0] = priceFutures[positionFutures < 0] - 0.5
   
   payoffFutures[i,] = (-apply(positionFutures*priceFutures, 2, sum) - 0.0001*apply(abs(positionFutures), 2, sum))*100
   
-  #·ÖÊ±µãÁÐ³öÆÚ»õ½»Ò×Í·´ç£¨ÆæÊýÐÐ£©¡¢½»Ò×¼Û¸ñ£¨Å¼ÊýÐÐ£©£¬Ã¿±Ê×Üpayoff£¨ÆæÊýÐÐ×îºóÒ»ÁÐ£©£¬Ã¿±ÊÆÚ»õ¼Û¸ñ²¨¶¯ÂÊ£¨Å¼ÊýÐÐ×îºóÒ»ÁÐ£©£¨ÔÚdataPointDivided±äÁ¿£©
+  #åˆ†æ—¶ç‚¹åˆ—å‡ºæœŸè´§äº¤æ˜“å¤´å¯¸ï¼ˆå¥‡æ•°è¡Œï¼‰ã€äº¤æ˜“ä»·æ ¼ï¼ˆå¶æ•°è¡Œï¼‰ï¼Œæ¯ç¬”æ€»payoffï¼ˆå¥‡æ•°è¡Œæœ€åŽä¸€åˆ—ï¼‰ï¼Œæ¯ç¬”æœŸè´§ä»·æ ¼æ³¢åŠ¨çŽ‡ï¼ˆå¶æ•°è¡Œæœ€åŽä¸€åˆ—ï¼‰ï¼ˆåœ¨dataPointDividedå˜é‡ï¼‰
   for (j in 1:21) {
     if (i==1) {
       dataPointDivided[[j]] = matrix(nrow = 614*2, ncol = 23, dimnames = list(1:(614*2),1:23))
@@ -114,7 +114,7 @@ for (i in 1:614) {
   }
 }
 
-#ÈÕÆÚ¡¢Ê±¼äÐòÁÐÃû³Æ£¬ÃüÃû
+#æ—¥æœŸã€æ—¶é—´åºåˆ—åç§°ï¼Œå‘½å
 pointTiming = contract[[1]][10:30, 1] %>% as.character() %>% substr(., 12, 16)
 pointCalendar = names(priceDayTimeList)[1:614] %>% substr(., 3, 10)
 dimnames(payoffFutures) = list(pointCalendar, pointTiming)
@@ -131,7 +131,7 @@ colnames(payoffCombined)[22] = "Option"; rownames(payoffCombined)[1] = "Total"
 #dataPointDivided[[1]][seq(1,1228,2), 23] %>% sum
 #payoffFuturesTotal[1]
 
-#¼ÆËãÆÚ»õpayoff+ÆÚÈ¨payoff£¬µ¥¶ÀÁÐ³ö²¨¶¯ÂÊ
+#è®¡ç®—æœŸè´§payoff+æœŸæƒpayoffï¼Œå•ç‹¬åˆ—å‡ºæ³¢åŠ¨çŽ‡
 payoffCombinedFO = payoffCombined[, 1:21] + payoffCombined[, 22]
 dataPointDividedFO = dataPointDivided; volatilityFutures = payoffCombinedFO[2:615, ]
 for (i in 1:21) {
@@ -142,32 +142,32 @@ sort(payoffCombinedFO[1,], decreasing = T)
 
 
 #-----------------------------------------------------------
-#×÷Í¼£¬½á¹û·ÖÎö
-#ÕÒ³öÆÚÈ¨»»ºÏÔ¼µÄÁÐ±íÏÂ±ê,»­Í¼(ÆÚ»õpayoff max)
+#ä½œå›¾ï¼Œç»“æžœåˆ†æž
+#æ‰¾å‡ºæœŸæƒæ¢åˆçº¦çš„åˆ—è¡¨ä¸‹æ ‡,ç”»å›¾(æœŸè´§payoff max)
 pointSwift = ymd_hm(c("2016-11-15 20:59", "2017-03-15 20:59", "2017-07-14 20:59", "2017-11-15 20:59", "2018-03-15 20:59", "2018-07-13 20:59", "2018-11-15 20:59", "2019-03-15 20:59", "2019-05-25 20:59")) %>% as.Date()
 pointCalendarL = names(priceDayTimeList)[1:614] %>% substr(., 1, 10) %>% as.Date()
 pointLabAxis = pointCalendarL %in% pointSwift  
 
 i = which.max(payoffFuturesTotal)
-plot(cumsum(payoffFutures[,i]), type = "l", col = "red", xaxt = "n", xlab = "ÆÚÈ¨¿ª²ÖÈÕÆÚ", ylab = "ÀÛ»ýÊÕÒæ", ylim = c(-1750000, 500000),main = paste("¶Ô³åÊ±µã", pointTiming[i]), sub = "I1705-I1909")#²»Í¬Ê±µã¶Ô³åµÄÆÚ»õÀÛ»ýpayoff
+plot(cumsum(payoffFutures[,i]), type = "l", col = "red", xaxt = "n", xlab = "æœŸæƒå¼€ä»“æ—¥æœŸ", ylab = "ç´¯ç§¯æ”¶ç›Š", ylim = c(-1750000, 500000),main = paste("å¯¹å†²æ—¶ç‚¹", pointTiming[i]), sub = "I1705-I1909")#ä¸åŒæ—¶ç‚¹å¯¹å†²çš„æœŸè´§ç´¯ç§¯payoff
 axis(1,at = seq(1,614)[pointLabAxis], labels = pointCalendar[pointLabAxis]) 
 lines(cumsum(payoffOption))
 legend("bottomleft", inset=, c("futures","options"),
        lty=c(1,1), col=c("red","black"),cex=0.85, bty = "n")
 
 
-#»­ÔÚÒ»ÕÅÍ¼ÖÐ
+#ç”»åœ¨ä¸€å¼ å›¾ä¸­
 payoffFuturesCumsum = xts(apply(payoffFutures, 2, cumsum), order.by = as.Date(pointCalendarL))
 colnames(payoffFuturesCumsum) = pointTiming
-dygraph(payoffFuturesCumsum, main = "¸÷Ê±µã¶Ô³åÆÚ»õµÄÀÛ»ýpayoff")%>%
+dygraph(payoffFuturesCumsum, main = "å„æ—¶ç‚¹å¯¹å†²æœŸè´§çš„ç´¯ç§¯payoff")%>%
   dyLegend(width = 800)
 
-barplot(apply(payoffFutures, 2, sum), names.arg = pointTiming, xlab = "ÆÚ»õ¶Ô³åÊ±µã", ylab = "ÆÚ»õpayoff", main = "ÆÚ»õpayoff")
+barplot(apply(payoffFutures, 2, sum), names.arg = pointTiming, xlab = "æœŸè´§å¯¹å†²æ—¶ç‚¹", ylab = "æœŸè´§payoff", main = "æœŸè´§payoff")
 # cor(payoffFutures, payoffOption)
 # corPayoff = cbind(payoffFuturesTotal, cor(payoffFutures, payoffOption))
 # corPayoff = corPayoff[order(corPayoff[,1], decreasing = T), ]
 
-#Êä³ö
+#è¾“å‡º
 write.csv(payoffCombinedFO, "E:/R/hedge/delta_hedge_payoffCombined.csv")
 for (i in 1:21) {
   write.csv(dataPointDividedFO[[i]], paste0("E:/R/hedge/delta_hedge_daily_",sub(":", "", pointTiming[i]),".csv"))
