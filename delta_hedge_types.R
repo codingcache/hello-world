@@ -13,9 +13,6 @@ outputData = foreach(I = 0:36, .packages = c("magrittr", "fOptions", "lubridate"
   outputData = NA
   try({
     assign("typeForThisOne", read.csv(paste0("futuresdata/type", as.character(I),".csv"), stringsAsFactors = F))
-    #typeForThisOne <- read.csv("hedge/iron3min.csv", stringsAsFactors = F)
-    
-    #将数据按合约拆分，筛选出整数、半点数据
     contract = list()
     N = ncol(typeForThisOne)/5
     if (I %in% c(3,8,28)) {
@@ -140,6 +137,7 @@ outputData = foreach(I = 0:36, .packages = c("magrittr", "fOptions", "lubridate"
     #计算期货头寸、payoff、volatility
     payoffFutures = matrix(nrow = W, ncol = L)
     volatilityFutures = matrix(nrow = W, ncol = L)
+    payoffOption = c()
     for (i in 1:W) {
       #futuresComputing[[i]] = data.frame(date = names(priceDayTimeList)[i], deltaOption = c(deltaOptionOpen[i], price))
       deltaOption = rbind(deltaOptionOpen[i], deltaDayTimeList[[i]]) #每列是20天的期权delta，行代表不同对冲时间；首行加一行是第一笔交易的delta
@@ -153,16 +151,17 @@ outputData = foreach(I = 0:36, .packages = c("magrittr", "fOptions", "lubridate"
       priceFutures[positionFutures < 0] = priceFutures[positionFutures < 0] - tick[I+1]
       
       if (I %in% c(0,1,2,8,18,21,23,26,27,29,31,33,35)) {  #计算手续费两种计费方式
-        payoffFutures[i,] = (-apply(positionFutures*priceFutures, 2, sum) - 0.0001*fee_prop[I+1]*apply(abs(positionFutures)*priceFutures, 2, sum))*multiplie[I+1]
+        payoffFutures[i,] = (-apply(positionFutures*priceFutures, 2, sum) - 0.0001*fee_prop[I+1]*apply(abs(positionFutures)*priceFutures, 2, sum))*(10000000/priceFutures[2,1])    #手续费单位：总金额的万分之几   #加上名义本金
       }else {
-        payoffFutures[i,] = -apply(positionFutures*priceFutures, 2, sum)*multiplie[I+1] - fee_abs[I+1]*apply(abs(positionFutures), 2, sum)
+        payoffFutures[i,] = -apply(positionFutures*priceFutures, 2, sum)*(10000000/priceFutures[2,1]) - fee_abs[I+1]*apply(abs(positionFutures), 2, sum)*(10000000/(priceFutures[2,1]*multiplie[I+1]))   #手续费单位：元/每手  #加上名义本金
       }
       
       #计算期货交易价格的波动率，没交易的价格需要去除
       for (j in 1:L) {
-        pinOnVar = which(positionFutures[,j]!=0)
-        volatilityFutures[i, j] = (var(diff(log(priceFutures[pinOnVar,j])))*243)^0.5
+        #pinOnVar = which(positionFutures[,j]!=0)
+        volatilityFutures[i, j] = (var(diff(log(priceFutures[2:21,j])))*243)^0.5         #只算20天的波动率
       }
+      payoffOption[i] = (priceDayTimeList[[i]][1,1]-priceDayTimeList[[i]][20,L])*(10000000/priceDayTimeList[[i]][1,1])
     }
     
     
@@ -174,33 +173,26 @@ outputData = foreach(I = 0:36, .packages = c("magrittr", "fOptions", "lubridate"
     dimnames(volatilityFutures) = list(pointCalendar, pointTiming)
     
     #计算期权payoff、总payoff、平均volatility
-    payoffOption = sapply(1:W, function(x) {priceDayTimeList[[x]][1,1]-priceDayTimeList[[x]][20,L]})*multiplie[I+1]
+    #payoffOption = sapply(1:W, function(x) {priceDayTimeList[[x]][1,1]-priceDayTimeList[[x]][20,L]})*multiplie[I+1]
     payoffOption[payoffOption>0] = 0
     payoffFuturesTotal = apply(payoffFutures, 2, sum)
     payoffOptionTotal = sum(payoffOption)
     payoffTotal = payoffFuturesTotal+payoffOptionTotal
     volatilityAverage = apply(volatilityFutures, 2, mean)
     
-    # sort(payoffTotal, decreasing = T)%>%View()
-    #---------------------------------------------------------------
-    # 
-    # 
-    # 
-    # 
-    # 
-    # 
-    # 
-    # 
-    # 
-    # 
-    # 
-    # 
-    # 
-    #---------------------------------------------------------------
-    # rm(list = ls(all.names = T))
-    # load("delta_hedge_type_test.RData")
-    
-    
+#########################################################
+# 
+#     
+#     
+#     
+#     
+#     
+#     
+#     
+#     
+#     
+#########################################################
+
     contract = list()
     for (i in 1:N) {
       contract[[i]] = cbind(ymd_hms(typeForThisOne[, (N+1-i)*5-4]), typeForThisOne[, ((N+1-i)*5-3):((N+1-i)*5-2)]) %>% na.omit
@@ -275,8 +267,8 @@ outputData = foreach(I = 0:36, .packages = c("magrittr", "fOptions", "lubridate"
     }
     
     #计算期货调仓时position变化量
-    positionFutures = list()
-    priceFutures = list()
+    positionFutures = c()
+    priceFutures = c()
     payoffFuturesVol = matrix(ncol = 3, nrow = W)
     volatilityFuturesVol = matrix(ncol = 3, nrow = W)
     for (s in 1:3) {
@@ -290,7 +282,11 @@ outputData = foreach(I = 0:36, .packages = c("magrittr", "fOptions", "lubridate"
         priceFutures[positionFutures > 0] = priceFutures[positionFutures > 0] + tick[I+1]  #滑点
         priceFutures[positionFutures < 0] = priceFutures[positionFutures < 0] - tick[I+1]
         
-        payoffFuturesVol[i, s] = (-sum(positionFutures*priceFutures) - 0.0001*sum(abs(positionFutures)))*multiplie[I+1]
+        if (I %in% c(0,1,2,8,18,21,23,26,27,29,31,33,35)) {
+          payoffFuturesVol[i, s] = (-sum(positionFutures*priceFutures) - 0.0001*fee_prop[I+1]*sum(abs(positionFutures)*priceFutures))*(10000000/deltaDayTimeList[[i]][1, 1])      #手续费：万分之几
+        }else {
+          payoffFutures[i, s] = -sum(positionFutures*priceFutures)*(10000000/deltaDayTimeList[[i]][1, 1]) - fee_prop[I+1]*sum(abs(positionFutures))*(10000000/(deltaDayTimeList[[i]][1, 1]*multiplie[I+1]))     #手续费：元每手数
+        }
         
         #计算期货交易价格的波动率，没交易的价格需要去除
         volatilityFuturesVol[i, s] = (var(diff(log(priceFutures)))*243)^0.5
@@ -305,13 +301,13 @@ outputData = foreach(I = 0:36, .packages = c("magrittr", "fOptions", "lubridate"
     volatilityVolAverage = apply(volatilityFuturesVol, 2, mean, na.rm = T)
     volatilityAverage = c(volatilityAverage, volatilityVolAverage)
     output = cbind(payoffTotal, volatilityAverage)
+    
   }, silent = T)
   return(output)
 }
 stopCluster(cl)
 Sys.time()-t1
-#save.image("delta_hedgeTT.RData")
-# View(output[,1] %>% sort(decreasing = T))
+
 
 #############################################
 # 
@@ -352,8 +348,8 @@ pdf(file = "delta_hedge_types.pdf")
 for (i in 1:x) {
   #jpeg(file = paste0("delta_hedge_type", as.character(i-1), "_", ID[i], ".jpeg"), width=480*4, height=480*4, units = "px", res = 72*4, pointsize = 12)
   k = nrow(outputData[[i]])-3
-  p1 = outputData[[i]][1:k,1] %>% scale()
-  p2 = outputData[[i]][1:k,2] %>% scale()
+  p1 = outputData[[i]][1:k,1]
+  p2 = outputData[[i]][1:k,2]
   plot(p2, p1, xlab = "scaled volatility", ylab = "scaled payoff", main = paste0(as.character(i-1), "-", ID[i]))
   text(p2, p1-0.07, labels = rownames(outputData[[i]])[1:k], cex = 0.8)
   abline(h = 0, lty = 3)
