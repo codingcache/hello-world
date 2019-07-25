@@ -376,3 +376,29 @@ for (i in 1:x) {
   axis(1, at = 1:nrow(outputData[[i]]), labels = rownames(outputData[[i]]), cex.axis = 0.9)
 }
 dev.off()
+
+
+#输出最大payoff的六个点，再夸品种比较
+mxall = matrix(ncol = x*3, nrow = 6) %>% as.data.frame()
+colnames(mxall)[seq(1, x*3, 3)] = ID
+colnames(mxall)[seq(2, x*3, 3)] = paste0("payoff_", ID)
+colnames(mxall)[seq(3, x*3, 3)] = ""
+mxlist = c(); mxlist_st = c()
+for (i in 1:x) {
+  mx = outputData[[i]][,1]
+  l = length(mx)
+  mx = -mx/mx[l-3]
+  mx = mx[order(mx, decreasing = T)]
+  mx = mx[c(1:3, (l-2):l)]
+  mxall[, 3*i-2] = names(mx)
+  mxall[, 3*i-1] = mx
+  mxall[, 3*i] = ""
+  names(mx) = paste0(ID[i], "_", names(mx), c(rep("T", 3), rep("B", 3)))
+  mxlist_st = append(mxlist_st, mx[c(1,6)])
+  mxlist = append(mxlist, mx)
+}
+mxlist = mxlist[order(mxlist, decreasing = T)] %>% as.data.frame()
+mxlist_st = mxlist_st[order(mxlist_st, decreasing = T)] %>% as.data.frame()
+write.csv(mxall, file = "hedge/delta_hedge_types_ranking.csv")
+write.csv(mxlist, file = "hedge/delta_hedge_types_ranking_combined.csv")
+write.csv(mxlist_st, file = "hedge/delta_hedge_types_ranking_combined_st.csv")
