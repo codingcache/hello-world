@@ -15,7 +15,7 @@ outputData = foreach(I = 0:36, .packages = c("magrittr", "fOptions", "lubridate"
     assign("typeForThisOne", read.csv(paste0("futuresdata/type", as.character(I),".csv"), stringsAsFactors = F))
     contract = list()
     N = ncol(typeForThisOne)/5
-    if (I %in% c(3,8,28)) {
+    if (I==28) {
       N = N-1
     }
     for (i in 1:N) {
@@ -159,7 +159,13 @@ outputData = foreach(I = 0:36, .packages = c("magrittr", "fOptions", "lubridate"
       #计算期货交易价格的波动率，没交易的价格需要去除
       for (j in 1:L) {
         #pinOnVar = which(positionFutures[,j]!=0)
-        volatilityFutures[i, j] = (var(diff(log(priceFutures[2:21,j])))*243)^0.5         #只算20天的波动率
+        if (j==1) {
+          volatilityFutures[i, j] = (var(diff(log(priceFutures[c(1, 3:21),j])))*243)^0.5         #只算20天的波动率
+        }else if (j==L) {
+          volatilityFutures[i, j] = (var(diff(log(priceFutures[c(2:20, 22),j])))*243)^0.5         #只算20天的波动率
+        }else {
+          volatilityFutures[i, j] = (var(diff(log(priceFutures[2:21,j])))*243)^0.5         #只算20天的波动率
+        }
       }
       payoffOption[i] = (priceDayTimeList[[i]][1,1]-priceDayTimeList[[i]][20,L])*(10000000/priceDayTimeList[[i]][1,1])
     }
@@ -285,7 +291,7 @@ outputData = foreach(I = 0:36, .packages = c("magrittr", "fOptions", "lubridate"
         if (I %in% c(0,1,2,8,18,21,23,26,27,29,31,33,35)) {
           payoffFuturesVol[i, s] = (-sum(positionFutures*priceFutures) - 0.0001*fee_prop[I+1]*sum(abs(positionFutures)*priceFutures))*(10000000/deltaDayTimeList[[i]][1, 1])      #手续费：万分之几
         }else {
-          payoffFutures[i, s] = -sum(positionFutures*priceFutures)*(10000000/deltaDayTimeList[[i]][1, 1]) - fee_prop[I+1]*sum(abs(positionFutures))*(10000000/(deltaDayTimeList[[i]][1, 1]*multiplie[I+1]))     #手续费：元每手数
+          payoffFuturesVol[i, s] = -sum(positionFutures*priceFutures)*(10000000/deltaDayTimeList[[i]][1, 1]) - fee_abs[I+1]*sum(abs(positionFutures))*(10000000/(deltaDayTimeList[[i]][1, 1]*multiplie[I+1]))     #手续费：元每手数
         }
         
         #计算期货交易价格的波动率，没交易的价格需要去除
@@ -349,15 +355,24 @@ for (i in 1:x) {
   #jpeg(file = paste0("delta_hedge_type", as.character(i-1), "_", ID[i], ".jpeg"), width=480*4, height=480*4, units = "px", res = 72*4, pointsize = 12)
   k = nrow(outputData[[i]])-3
   p1 = outputData[[i]][1:k,1]
-  p2 = outputData[[i]][1:k,2]
-  plot(p2, p1, xlab = "scaled volatility", ylab = "scaled payoff", main = paste0(as.character(i-1), "-", ID[i]))
-  text(p2, p1-0.07, labels = rownames(outputData[[i]])[1:k], cex = 0.8)
-  abline(h = 0, lty = 3)
-  abline(v = 0, lty = 3)
-  lmSP = lm(p1[2:(k-1)]~p2[2:(k-1)])
+  p2 = outputData[[i]][1:k,2]/outputData[[i]][k,2]
+  plot(p2, p1, xlab = "scaled volatility", ylab = "total payoff", main = paste0(as.character(i-1), "-", ID[i]))
+  text(p2, p1+0.001*mean(p1), labels = rownames(outputData[[i]])[1:k], cex = 0.8)
+  abline(h = mean(p1), lty = 3)
+  abline(v = mean(p2), lty = 3)
+  lmSP = lm(p1[1:(k)]~p2[1:(k)])
   #lmSP = lm(p1[1:10]~p2[1:10])
   abline(lmSP)
   #text(min(p2), min(p1), paste0("R-square = ",format(summary(lmSP)$adj.r.squared, digits = 4)))
   #dev.off()
+}
+dev.off()
+
+
+pdf(file = "delta_hedge_types_payoff.pdf", width = 7*16/9, height = 7)
+for (i in 1:x) {
+  p1 = outputData[[i]][,1]
+  plot(p1, xlab = "strategy", ylab = "total payoff", main = paste0(as.character(i-1), "-", ID[i]), xaxt = "n", type = "b")
+  axis(1, at = 1:nrow(outputData[[i]]), labels = rownames(outputData[[i]]), cex.axis = 0.9)
 }
 dev.off()
