@@ -8,7 +8,7 @@ rm(list = ls(all.names = T))
 cl=makeCluster(4)
 registerDoParallel(cl)
 t1 = Sys.time()
-
+#I=0
 outputData = foreach(I = 0:36, .packages = c("magrittr", "fOptions", "lubridate", "xts")) %dopar% {
   outputData = NA
   try({
@@ -89,6 +89,7 @@ outputData = foreach(I = 0:36, .packages = c("magrittr", "fOptions", "lubridate"
     priceDayTimeList = list()
     #pointDayTimeList = list()
     deltaDayTimeList = list()
+    priceOption = c()
     n = 1
     #i=1;j=1;k=1;h=1
     for (i in 1:N) {   #i:不同合约
@@ -99,7 +100,8 @@ outputData = foreach(I = 0:36, .packages = c("magrittr", "fOptions", "lubridate"
         sigOptionOpen[n] = (var(diff(log(contract[[i]][(((rep(pinForThisOne,20)-1)-(19:0)*L)), 3])))*243)^0.5       ##################调整公式21天改20天
         priceOptionOpen[n] = contract[[i]][pinForThisOne, 2]
         deltaOptionOpen[n] = GBSGreeks(Selection = "Delta", TypeFlag = "c", S = priceOptionOpen[n], X = priceOptionOpen[n], Time = (19+fractionTime[1])/243, r = 0.03, b = 0, sigOptionOpen[n])
-        
+        priceOption[n] = GBSOption(TypeFlag = "c", S = priceOptionOpen[n], X = priceOptionOpen[n], Time = (19+fractionTime[1])/243, r = 0.03, b = 0, sigOptionOpen[n])@price                    ################期权价格
+
         #再算option随时间变化、不同时点对冲的delta
         #sigOptionHolding = matrix(ncol = 1, nrow = 20)   #初始化声明变量
         priceDayTime = matrix(ncol = L, nrow = 20)
@@ -168,6 +170,7 @@ outputData = foreach(I = 0:36, .packages = c("magrittr", "fOptions", "lubridate"
         }
       }
       payoffOption[i] = (priceDayTimeList[[i]][1,1]-priceDayTimeList[[i]][20,L])*(10000000/priceDayTimeList[[i]][1,1])
+      priceOption[i] = priceOption[i] *(10000000/priceDayTimeList[[i]][1,1])                        ###################期权价格
     }
     
     
@@ -186,19 +189,21 @@ outputData = foreach(I = 0:36, .packages = c("magrittr", "fOptions", "lubridate"
     payoffTotal = payoffFuturesTotal+payoffOptionTotal
     volatilityAverage = apply(volatilityFutures, 2, mean)
     
-#########################################################
-# 
-#     
-#     
-#     
-#     
-#     
-#     
-#     
-#     
-#     
-#########################################################
-
+    
+    
+    #########################################################
+    # 
+    #     
+    #     
+    #     
+    #     
+    #     
+    #     
+    #     
+    #     
+    #     
+    #########################################################
+    
     contract = list()
     for (i in 1:N) {
       contract[[i]] = cbind(ymd_hms(typeForThisOne[, (N+1-i)*5-4]), typeForThisOne[, ((N+1-i)*5-3):((N+1-i)*5-2)]) %>% na.omit
@@ -306,7 +311,9 @@ outputData = foreach(I = 0:36, .packages = c("magrittr", "fOptions", "lubridate"
     payoffTotal = c(payoffTotal, payoffFuturesVolTotal+payoffOptionTotal)
     volatilityVolAverage = apply(volatilityFuturesVol, 2, mean, na.rm = T)
     volatilityAverage = c(volatilityAverage, volatilityVolAverage)
-    output = cbind(payoffTotal, volatilityAverage)
+    
+    #输出：每种策略的总payoff和平均volatility，以及每一天的期货payoff、期权payoff、期权价格的收益
+    output = list(cbind(payoffTotal, volatilityAverage), cbind(payoffFutures, payoffFuturesVol, payoffOption, priceOption))
     
   }, silent = T)
   return(output)
@@ -314,7 +321,15 @@ outputData = foreach(I = 0:36, .packages = c("magrittr", "fOptions", "lubridate"
 stopCluster(cl)
 Sys.time()-t1
 
-
+###
+plot(output[[2]][,19], type = "l", ylim = c(min(payoffOption), max(payoffFutures)))
+abline(h = 0, col = "grey")
+lines(output[[2]][,20], type = "l", col = "blue")
+sss = payoffOption!=0
+payoffwin = payoffFutures[,13]+payoffOption+priceOption
+payoffwin = payoffFuturesVol[,1]+payoffOption+priceOption
+plot(cumsum(payoffwin), type = "l")
+abline(h=0, col = "grey")
 #############################################
 # 
 # 
