@@ -8,7 +8,7 @@ rm(list = ls(all.names = T))
 cl=makeCluster(4)
 registerDoParallel(cl)
 t1 = Sys.time()
-#I=0
+#I=33
 outputData = foreach(I = 0:36, .packages = c("magrittr", "fOptions", "lubridate", "xts")) %dopar% {
   outputData = NA
   try({
@@ -21,12 +21,18 @@ outputData = foreach(I = 0:36, .packages = c("magrittr", "fOptions", "lubridate"
     for (i in 1:N) {
       contract[[i]] = cbind(ymd_hms(typeForThisOne[, (N+1-i)*5-4]), typeForThisOne[, ((N+1-i)*5-3):((N+1-i)*5-2)]) %>% na.omit
       filtTime = contract[[i]][,1]
-      if (I==3 | I==8 | I==28) {
+      if (I==3 | I==8 | I==28) {   #无夜盘
         deleteTime = hour(filtTime) %in% c(0,1,2,21,22,23)
         filtTime = filtTime[!deleteTime]
         contract[[i]] = contract[[i]][!deleteTime, ]
-      } else {
-        deleteTime = hour(filtTime) %in% c(0,1,2)
+      }else if (I %in% c(6, 32:36)) {        #一点收盘
+        deleteTime = hour(filtTime)==2 | (hour(filtTime)==1 & minute(filtTime)!=0)
+        filtTime = filtTime[!deleteTime]
+        contract[[i]] = contract[[i]][!deleteTime, ]
+      }else if (I %in% c(29, 30)){    #2:30收盘
+        contract[[i]] = contract[[i]]
+      }else {    #23:30收盘
+        deleteTime = hour(filtTime) %in% c(0,1,2) | (hour(filtTime)==23 & minute(filtTime)>30)
         filtTime = filtTime[!deleteTime]
         contract[[i]] = contract[[i]][!deleteTime, ]
       }
@@ -48,7 +54,7 @@ outputData = foreach(I = 0:36, .packages = c("magrittr", "fOptions", "lubridate"
       definingDay = listingDay %>% "-"(15) %>% "<="(0) %>% table %>% .[2] %>% listingDay[.]
       day(dateDivide[i]) = definingDay
     }
-    listingDate = contract[[N]][,1] %>% as.Date() %>% unique()
+    listingDate = contract[[N]][,1][!(hour(contract[[N]][,1]) %in% c(0,1,2,21,22,23))] %>% as.Date() %>% unique()
     dateDivide[N+1] = listingDate[length(listingDate)-21]
     hour(dateDivide[N+1]) = 20
     
@@ -90,17 +96,35 @@ outputData = foreach(I = 0:36, .packages = c("magrittr", "fOptions", "lubridate"
     #pointDayTimeList = list()
     deltaDayTimeList = list()
     priceOption = c()
-    n = 1
+    n = 1; skip_count = 0
     #i=1;j=1;k=1;h=1
     for (i in 1:N) {   #i:不同合约
-      for (j in 1:length(pin[[i]])) {  #j:不同日期开仓期权
+      #i=8
+      for (j in 1:(length(pin[[i]])+skip_count)) {  #j:不同日期开仓期权
+        if (j==1) {
+          skip_run = skip_count   #新合约开始，先将skip值赋给新的一个计数器，用于在索引减去上个合约没算的的天数
+          skip_fixed = skip_count   #如果上个合约没有少记，skip全为0，否则此合约内skip_fixed固定为上合约少记天数
+        }
         
-        pinForThisOne = pin[[i]][j]
+        if (skip_run!=0){
+          pinForThisOne = pin[[i]][1]-L*skip_run
+          skip_run = skip_run-1           #当该合约记录完上个合约少记的天数后就重置skip_run变量为零
+        }else {
+          pinForThisOne = pin[[i]][j-skip_fixed]  #e.g.少记4天，j=5时首次执行该行，skip_fixed=4
+        }
+        
+        
+        if (is.na(contract[[i]][pinForThisOne+L*20-1, 1])) {
+          skip_count = skip_count+1     #统计有几天要移到后一个合约
+          next()
+        }
+        
+        skip_count = 0   #新合约开始后(j=1)，skip_count归零，之后若有NA，skip_count增加，但next已经跳过该循环
         #先算option开仓的一个delta
         sigOptionOpen[n] = (var(diff(log(contract[[i]][(((rep(pinForThisOne,20)-1)-(19:0)*L)), 3])))*243)^0.5       ##################调整公式21天改20天
         priceOptionOpen[n] = contract[[i]][pinForThisOne, 2]
         deltaOptionOpen[n] = GBSGreeks(Selection = "Delta", TypeFlag = "c", S = priceOptionOpen[n], X = priceOptionOpen[n], Time = (19+fractionTime[1])/243, r = 0.03, b = 0, sigOptionOpen[n])
-        priceOption[n] = GBSOption(TypeFlag = "c", S = priceOptionOpen[n], X = priceOptionOpen[n], Time = (19+fractionTime[1])/243, r = 0.03, b = 0, sigOptionOpen[n])@price                    ################期权价格
+        #priceOption[n] = GBSOption(TypeFlag = "c", S = priceOptionOpen[n], X = priceOptionOpen[n], Time = (19+fractionTime[1])/243, r = 0.03, b = 0, sigOptionOpen[n])@price                    ################期权价格
 
         #再算option随时间变化、不同时点对冲的delta
         #sigOptionHolding = matrix(ncol = 1, nrow = 20)   #初始化声明变量
@@ -126,6 +150,7 @@ outputData = foreach(I = 0:36, .packages = c("magrittr", "fOptions", "lubridate"
         names(priceDayTimeList)[n] = as.character((pointDayTime[1,1])) 
         n = n+1
       }
+      #View(priceDayTimeList)
     }
     W = length(priceOptionOpen)  #W=614, L=21
     
@@ -170,7 +195,7 @@ outputData = foreach(I = 0:36, .packages = c("magrittr", "fOptions", "lubridate"
         }
       }
       payoffOption[i] = (priceDayTimeList[[i]][1,1]-priceDayTimeList[[i]][20,L])*(10000000/priceDayTimeList[[i]][1,1])
-      priceOption[i] = priceOption[i] *(10000000/priceDayTimeList[[i]][1,1])                        ###################期权价格
+      #priceOption[i] = priceOption[i] *(10000000/priceDayTimeList[[i]][1,1])                        ###################期权价格
     }
     
     
@@ -188,8 +213,6 @@ outputData = foreach(I = 0:36, .packages = c("magrittr", "fOptions", "lubridate"
     payoffOptionTotal = sum(payoffOption)
     payoffTotal = payoffFuturesTotal+payoffOptionTotal
     volatilityAverage = apply(volatilityFutures, 2, mean)
-    
-    
     
     #########################################################
     # 
@@ -242,10 +265,29 @@ outputData = foreach(I = 0:36, .packages = c("magrittr", "fOptions", "lubridate"
     deltaDayTimeListing = list()
     for (s in c(1, 1.5, 2)) {
       deltaDayTimeList = list()
-      n = 1
+      n = 1; skip_count=0
       for (i in 1:N) {
-        for (j in 1:length(pin[[i]])) {
-          pinForThisOne = pin[[i]][j]
+        
+        for (j in 1:(length(pin[[i]])+skip_count)) {  #j:不同日期开仓期权
+          if (j==1) {
+            skip_run = skip_count   #新合约开始，先将skip值赋给新的一个计数器，用于在索引减去上个合约没算的的天数
+            skip_fixed = skip_count   #如果上个合约没有少记，skip全为0，否则此合约内skip_fixed固定为上合约少记天数
+          }
+          
+          if (skip_run!=0){
+            pinForThisOne = pin[[i]][1]-L2*skip_run
+            skip_run = skip_run-1           #当该合约记录完上个合约少记的天数后就重置skip_run变量为零
+          }else {
+            pinForThisOne = pin[[i]][j-skip_fixed]  #e.g.少记4天，j=5时首次执行该行，skip_fixed=4
+          }
+          
+          if (is.na(contract[[i]][pinForThisOne+L2*20-1, 1])) {
+            skip_count = skip_count+1     #统计有几天要移到后一个合约
+            next()
+          }
+          
+          skip_count = 0   #新合约开始后(j=1)，skip_count归零，之后若有NA，skip_count增加，但next已经跳过该循环
+          
           # #先算option开仓的一个delta
           # sigOptionOpen[n] = (var(diff(log(contract[[i]][(((rep(pinForThisOne,20)-1)-(19:0)*L2)), 3])))*243)^0.5
           # priceOptionOpen[n] = contract[[i]][pinForThisOne, 2]
@@ -312,10 +354,10 @@ outputData = foreach(I = 0:36, .packages = c("magrittr", "fOptions", "lubridate"
     volatilityVolAverage = apply(volatilityFuturesVol, 2, mean, na.rm = T)
     volatilityAverage = c(volatilityAverage, volatilityVolAverage)
     
-    #输出：每种策略的总payoff和平均volatility，以及每一天的期货payoff、期权payoff、期权价格的收益
-    output = list(cbind(payoffTotal, volatilityAverage), cbind(payoffFutures, payoffFuturesVol, payoffOption, priceOption))
+    #输出：每种策略的总payoff和平均volatility，以及每一天的期货payoff、期权payoff
+    output = list(cbind(payoffTotal, volatilityAverage), cbind(payoffFutures, payoffFuturesVol, payoffOption))
     
-  }, silent = T)
+  }, silent = F)
   return(output)
 }
 stopCluster(cl)
@@ -345,6 +387,8 @@ abline(h=0, col = "grey")
 # 
 #############################################
 #输出结果
+outputDataT = lapply(outputData, "[[", 2)
+outputData = lapply(outputData, "[[", 1)
 #write.csv(t(read.csv("Book2.csv")), "Book1.csv")
 ID = c("I","J","JM","SF","SM","ZC","SN","SR","JD","CF","C","CS","OI","Y","P","A","M","RM","RU","L","TA","PP","V","FU","FG","MA","RB","HC","AP","AG","AU","BU","AL","CU","NI","PB","ZN")
 x = length(outputData)
