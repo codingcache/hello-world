@@ -2,13 +2,15 @@ library(magrittr)
 library(fOptions)
 library(lubridate)
 library(xts)
+library(PerformanceAnalytics)
+library(dygraphs)
 library(doParallel)
 library(foreach)
 rm(list = ls(all.names = T))
 cl=makeCluster(4)
 registerDoParallel(cl)
 t1 = Sys.time()
-#I=33
+#I=2
 outputData = foreach(I = 0:36, .packages = c("magrittr", "fOptions", "lubridate", "xts")) %dopar% {
   outputData = NA
   try({
@@ -86,7 +88,8 @@ outputData = foreach(I = 0:36, .packages = c("magrittr", "fOptions", "lubridate"
     #计算日内时间间隔相对于一天的百分比
     fractionTime = difftime(contract[[1]][pin[[1]][2]-1, 1], contract[[1]][(pin[[1]][1]):(pin[[1]][2]-1), 1], units = "days") %>% as.numeric() %>% "%%"(1)
     L = length(fractionTime)
-    # I=1
+    fractionTime = rep(0, L)+10^-9
+    # I=0
     #---------------------------------------------
     #计算期权delta，每个算20次，记录期货价格，期货头寸等于前后delta变化；再分不同时段计算
     sigOptionOpen = c()
@@ -120,10 +123,11 @@ outputData = foreach(I = 0:36, .packages = c("magrittr", "fOptions", "lubridate"
         }
         
         skip_count = 0   #新合约开始后(j=1)，skip_count归零，之后若有NA，skip_count增加，但next已经跳过该循环
+        #pinForThisOne = pin[[i]][j-skip_fixed]
         #先算option开仓的一个delta
-        sigOptionOpen[n] = (var(diff(log(contract[[i]][(((rep(pinForThisOne,20)-1)-(19:0)*L)), 3])))*243)^0.5       ##################调整公式21天改20天
+        sigOptionOpen[n] = (var(diff(log(contract[[i]][(((rep(pinForThisOne,21)-1)-(20:0)*L)), 3])))*243)^0.5       ##################调整公式21天改20天
         priceOptionOpen[n] = contract[[i]][pinForThisOne, 2]
-        deltaOptionOpen[n] = GBSGreeks(Selection = "Delta", TypeFlag = "c", S = priceOptionOpen[n], X = priceOptionOpen[n], Time = (19+fractionTime[1])/243, r = 0.03, b = 0, sigOptionOpen[n])
+        deltaOptionOpen[n] = GBSGreeks(Selection = "Delta", TypeFlag = "c", S = priceOptionOpen[n], X = priceOptionOpen[n], Time = (19+fractionTime[1])/243, r = 0.03, b = 0.03, sigOptionOpen[n])
         #priceOption[n] = GBSOption(TypeFlag = "c", S = priceOptionOpen[n], X = priceOptionOpen[n], Time = (19+fractionTime[1])/243, r = 0.03, b = 0, sigOptionOpen[n])@price                    ################期权价格
 
         #再算option随时间变化、不同时点对冲的delta
@@ -141,7 +145,7 @@ outputData = foreach(I = 0:36, .packages = c("magrittr", "fOptions", "lubridate"
               priceDayTime[k, h] = contract[[i]][pinForThisOne+(k-1)*L+(h-1),3]
             }
             pointDayTime[k, h] = contract[[i]][pinForThisOne+(k-1)*L+(h-1),1]
-            deltaDayTime[k, h] = GBSGreeks(Selection = "Delta", TypeFlag = "c", S = priceDayTime[k, h], X = priceOptionOpen[n], Time = (20-k+fractionTime[h])/243, r = 0.03, b = 0, sigOptionOpen[n])        ##################计算delta时改用sigOptionOpen[n]
+            deltaDayTime[k, h] = GBSGreeks(Selection = "Delta", TypeFlag = "c", S = priceDayTime[k, h], X = priceOptionOpen[n], Time = (20-k+fractionTime[h])/243, r = 0.03, b = 0.03, sigOptionOpen[n])        ##################计算delta时改用sigOptionOpen[n]
           }
         }
         priceDayTimeList[[n]] = priceDayTime
@@ -231,12 +235,18 @@ outputData = foreach(I = 0:36, .packages = c("magrittr", "fOptions", "lubridate"
     for (i in 1:N) {
       contract[[i]] = cbind(ymd_hms(typeForThisOne[, (N+1-i)*5-4]), typeForThisOne[, ((N+1-i)*5-3):((N+1-i)*5-2)]) %>% na.omit
       filtTime = contract[[i]][,1]
-      if (I==3 | I==8 | I==28) {
+      if (I==3 | I==8 | I==28) {   #无夜盘
         deleteTime = hour(filtTime) %in% c(0,1,2,21,22,23)
         filtTime = filtTime[!deleteTime]
         contract[[i]] = contract[[i]][!deleteTime, ]
-      }else {
-        deleteTime = hour(filtTime) %in% c(0,1,2)
+      }else if (I %in% c(6, 32:36)) {        #一点收盘
+        deleteTime = hour(filtTime)==2 | (hour(filtTime)==1 & minute(filtTime)!=0)
+        filtTime = filtTime[!deleteTime]
+        contract[[i]] = contract[[i]][!deleteTime, ]
+      }else if (I %in% c(29, 30)){    #2:30收盘
+        contract[[i]] = contract[[i]]
+      }else {    #23:30收盘
+        deleteTime = hour(filtTime) %in% c(0,1,2) | (hour(filtTime)==23 & minute(filtTime)>30)
         filtTime = filtTime[!deleteTime]
         contract[[i]] = contract[[i]][!deleteTime, ]
       }
@@ -261,6 +271,7 @@ outputData = foreach(I = 0:36, .packages = c("magrittr", "fOptions", "lubridate"
     #计算时间占每日的比例
     intervalTime = difftime(contract[[1]][pin[[1]][2]-1, 1], contract[[1]][(pin[[1]][1]):(pin[[1]][2]-1), 1], units = "days") %>% as.numeric()
     L2 = length(intervalTime)
+    intervalTime = rep(0, L2)+10^-9
     
     deltaDayTimeListing = list()
     for (s in c(1, 1.5, 2)) {
@@ -296,7 +307,8 @@ outputData = foreach(I = 0:36, .packages = c("magrittr", "fOptions", "lubridate"
           deltaDayTimeList[[n]] = matrix(ncol = 3, nrow = 1000)    #声明变量，三列分别用来记录收益率突破时的价格、平仓价、突破时的期权delta， 突破一次记录一行  
           deltaDayTimeList[[n]][, 2] = contract[[i]][pinForThisOne+(L2*20-1), 3]
           deltaDayTimeList[[n]][1, c(1,3)] = c(priceOptionOpen[n], deltaOptionOpen[n])  #将期权交易时的价格、delta记录在第一行
-          
+          # rownames(deltaDayTimeList[[n]]) = rownames(deltaDayTimeList[[n]], do.NULL = F)   #行命名
+          # rownames(deltaDayTimeList[[n]])[1] = contract[[i]][pinForThisOne, 1] %>% as.character()
           m = 2 
           priceRecorded = priceOptionOpen[n]    #用于记录上一次调仓时的价格
           for (k in 1:(L2*20-2)) {
@@ -306,8 +318,9 @@ outputData = foreach(I = 0:36, .packages = c("magrittr", "fOptions", "lubridate"
               #写入价格、delta
               deltaDayTimeList[[n]][m, 1] = priceDynamic
               intervalForThisOne = intervalTime[k%%L2+1] + (19-k%/%L2)
-              deltaDayTimeList[[n]][m, 3] = GBSGreeks(Selection = "Delta", TypeFlag = "c", S = priceDynamic, X = priceOptionOpen[n], Time = intervalForThisOne/243, r = 0.03, b = 0, sigOptionOpen[n])
+              deltaDayTimeList[[n]][m, 3] = GBSGreeks(Selection = "Delta", TypeFlag = "c", S = priceDynamic, X = priceOptionOpen[n], Time = intervalForThisOne/243, r = 0.03, b = 0.03, sigOptionOpen[n])
               priceRecorded = priceDynamic
+              # rownames(deltaDayTimeList[[n]])[m] = contract[[i]][pinForThisOne+k, 1] %>% as.character()          ##############################调试验证
               m = m+1
             }
           }
@@ -324,6 +337,7 @@ outputData = foreach(I = 0:36, .packages = c("magrittr", "fOptions", "lubridate"
     priceFutures = c()
     payoffFuturesVol = matrix(ncol = 3, nrow = W)
     volatilityFuturesVol = matrix(ncol = 3, nrow = W)
+    # fee = volatilityFuturesVol
     for (s in 1:3) {
       deltaDayTimeList = deltaDayTimeListing[[s]]
       for (i in 1:W) {
@@ -335,8 +349,10 @@ outputData = foreach(I = 0:36, .packages = c("magrittr", "fOptions", "lubridate"
         priceFutures[positionFutures > 0] = priceFutures[positionFutures > 0] + tick[I+1]  #滑点
         priceFutures[positionFutures < 0] = priceFutures[positionFutures < 0] - tick[I+1]
         
+        #fee[i, s] = (- 0.0001*fee_prop[I+1]*sum(abs(positionFutures)*priceFutures))*(10000000/deltaDayTimeList[[i]][1, 1])
         if (I %in% c(0,1,2,8,18,21,23,26,27,29,31,33,35)) {
           payoffFuturesVol[i, s] = (-sum(positionFutures*priceFutures) - 0.0001*fee_prop[I+1]*sum(abs(positionFutures)*priceFutures))*(10000000/deltaDayTimeList[[i]][1, 1])      #手续费：万分之几
+          #payoffFuturesVol[i, s] = (-sum(positionFutures*priceFutures))*(10000000/deltaDayTimeList[[i]][1, 1]) 
         }else {
           payoffFuturesVol[i, s] = -sum(positionFutures*priceFutures)*(10000000/deltaDayTimeList[[i]][1, 1]) - fee_abs[I+1]*sum(abs(positionFutures))*(10000000/(deltaDayTimeList[[i]][1, 1]*multiplie[I+1]))     #手续费：元每手数
         }
@@ -363,15 +379,6 @@ outputData = foreach(I = 0:36, .packages = c("magrittr", "fOptions", "lubridate"
 stopCluster(cl)
 Sys.time()-t1
 
-###
-plot(output[[2]][,19], type = "l", ylim = c(min(payoffOption), max(payoffFutures)))
-abline(h = 0, col = "grey")
-lines(output[[2]][,20], type = "l", col = "blue")
-sss = payoffOption!=0
-payoffwin = payoffFutures[,13]+payoffOption+priceOption
-payoffwin = payoffFuturesVol[,1]+payoffOption+priceOption
-plot(cumsum(payoffwin), type = "l")
-abline(h=0, col = "grey")
 #############################################
 # 
 # 
@@ -403,7 +410,7 @@ for (i in 1:x) {
   mxall[1:nrow(mx), (4*i-1)] = mx[,2]
   mxall[1:nrow(mx), (4*i)] = ""
   colnames(mxall)[(4*i-3):(4*i-1)] = c(ID[i], colnames(mx))
-  write.csv(mx, file = paste0("hedge/delta_hedge_", ID[i], ".csv"))
+  #write.csv(mx, file = paste0("hedge/delta_hedge_", ID[i], ".csv"))
 }
 write.csv(mxall, file = paste0("hedge/delta_hedge_", "all_types.csv"))
 
@@ -436,28 +443,92 @@ for (i in 1:x) {
 }
 dev.off()
 
-
-#输出最大payoff的六个点，再夸品种比较
-mxall = matrix(ncol = x*3, nrow = 6) %>% as.data.frame()
-colnames(mxall)[seq(1, x*3, 3)] = ID
-colnames(mxall)[seq(2, x*3, 3)] = paste0("payoff_", ID)
-colnames(mxall)[seq(3, x*3, 3)] = ""
-mxlist = c(); mxlist_st = c()
-for (i in 1:x) {
-  mx = outputData[[i]][,1]
-  l = length(mx)
-  mx = -mx/mx[l-3]
-  mx = mx[order(mx, decreasing = T)]
-  mx = mx[c(1:3, (l-2):l)]
-  mxall[, 3*i-2] = names(mx)
-  mxall[, 3*i-1] = mx
-  mxall[, 3*i] = ""
-  names(mx) = paste0(ID[i], "_", names(mx), c(rep("T", 3), rep("B", 3)))
-  mxlist_st = append(mxlist_st, mx[c(1,6)])
-  mxlist = append(mxlist, mx)
+######################
+#是否去除极端值的函数, 否则默认返回mean；若要去除极端值则判断return.v参数，返回mean、留存NA、是则去除NA
+WhetherCleanExtremity = function(type_index, answer = F, return.v = c("mean", "raw", "boiled")){
+  if (!answer){
+    if ("mean" %in% return.v) {
+      return(outputData[[type_index]][,1]/nrow(outputDataT[[type_index]]))    #返回均值 
+    }else if("raw" %in% return.v){
+      return(outputData[[type_index]][[2]])
+    }else {
+      return(outputData[[type_index]][,1]) 
+    }
+  }else {
+    dataDaily = outputDataT[[type_index]]
+    l = ncol(dataDaily); w = nrow(dataDaily)
+    dataDaily = (dataDaily[, 1:(l-1)]+dataDaily[, l]); l = l-1
+    qt = apply(dataDaily, 2, quantile, c(0.05, 0.95))    #去除极端大/小5%的数据
+    dataDaily[sapply(1:l, function(x){dataDaily[,x]<qt[1,x]|dataDaily[,x]>qt[2,x]})] = NA
+    if ("mean" %in% return.v){
+      return(colMeans(dataDaily, na.rm = T))
+    }else if("raw" %in% return.v){
+      return(dataDaily)
+    }else if("boiled" %in% return.v){
+      return(na.omit(dataDaily))
+    }else {
+      return(na.omit(dataDaily) %>% colSums)
+    }
+  }
 }
-mxlist = mxlist[order(mxlist, decreasing = T)] %>% as.data.frame()
-mxlist_st = mxlist_st[order(mxlist_st, decreasing = T)] %>% as.data.frame()
-write.csv(mxall, file = "hedge/delta_hedge_types_ranking.csv")
-write.csv(mxlist, file = "hedge/delta_hedge_types_ranking_combined.csv")
-write.csv(mxlist_st, file = "hedge/delta_hedge_types_ranking_combined_st.csv")
+# WhetherCleanExtremity(type_index = 1, answer = F, return.v = "sum")   #answer = F是原数据，T是去除极端值的数据
+
+#输出最大payoff的六个点，再跨品种比较
+payoffAbstracted = matrix(ncol = x*3, nrow = 6) %>% as.data.frame()
+colnames(payoffAbstracted)[seq(1, x*3, 3)] = ID     #命名
+colnames(payoffAbstracted)[seq(2, x*3, 3)] = paste0("payoff_", ID)
+colnames(payoffAbstracted)[seq(3, x*3, 3)] = ""
+payoffTop3 = matrix(ncol = 3, nrow = x*3*2); rownames(payoffTop3) = as.character(1:(x*6))
+payoffTop1 = matrix(ncol = 3, nrow = x*2); rownames(payoffTop1) = rep("", x*2)
+colnames(payoffTop3) = c("payoff", "type", "strategy"); colnames(payoffTop1) = colnames(payoffTop3)
+for (i in 1:x) {
+  pf = outputData[[i]][,1]   #取出每种商品各策略收益数据
+  #pf = WhetherCleanExtremity(type_index = i, answer = T, return.v = "mean")    #取出每种商品各策略收益数据
+  l = length(pf)
+  pf = -pf/pf[l-3]
+  #pf = pf[1:(l-3)]; l = l-3    #是否去除sig的三个策略
+  pf_index = order(pf, decreasing = T)[c(1:3, (l-2):l)]
+  pf = pf[pf_index]
+  payoffAbstracted[, 3*i-2] = names(pf)
+  payoffAbstracted[, 3*i-1] = pf
+  payoffAbstracted[, 3*i] = ""
+  names(pf) = paste0(ID[i], "_", names(pf), c(rep("T", 3), rep("B", 3)))
+  payoffTop1[(2*i-1):(2*i), ] = cbind(pf[c(1,6)], i, pf_index[c(1,6)])
+  rownames(payoffTop1)[(2*i-1):(2*i)] = names(pf)[c(1,6)]
+  payoffTop3[(6*i-5):(6*i), ] = cbind(pf, i, pf_index)
+  rownames(payoffTop3)[(6*i-5):(6*i)] = names(pf)
+}
+payoffTop3_ranked = payoffTop3[order(payoffTop3[, 1], decreasing = T), 1] %>% as.data.frame()
+payoffTop1_ranked = payoffTop1[order(payoffTop1[, 1], decreasing = T), 1] %>% as.data.frame()
+write.csv(payoffAbstracted, file = "hedge/delta_hedge_types_ranking.csv")
+write.csv(payoffTop3_ranked, file = "hedge/delta_hedge_types_ranking_combined.csv")
+write.csv(payoffTop1_ranked, file = "hedge/delta_hedge_types_ranking_combined_st.csv")
+
+
+#选出好的作图
+for (i in 1:37) {
+  type_i = xts(outputDataT[[payoffTop1[2*i-1, 2]]], order.by = ymd(rownames(outputDataT[[payoffTop1[2*(ifelse(i %in% c(4,9), i-1, i))-1, 2]]]))) #先提取单个品种所有策略数据
+  strategy_i = type_i[, payoffTop1[2*i-1, 3]]  #从payoffTop1提取每个产品最优策略的索引，从type_i取出数据
+  benchmark_i = type_i[, ncol(type_i)-4]   #以15：00为基准
+  if (i==1){
+    strategy_top = (strategy_i)-(benchmark_i)  #两种策略payoff的差值越大说明策略越好
+  }else {
+    strategy_top = merge(strategy_top, (strategy_i)-(benchmark_i))
+  }
+  colnames(strategy_top)[i] = ID[i]     #包含每种商品的最优策略
+}
+
+
+
+dateInterval = "2017-02-16/2019-05-14"
+strategy_topintop = strategy_top[dateInterval, order(colSums(strategy_top[dateInterval]), decreasing = T)[1:3]] %>% cumsum
+strategy_which = cumsum(strategy_top[dateInterval, 7])
+#avg = apply(strategy_topintop, 2, cumsum )%>% rowMeans %>% as.xts(., order.by = index(aaa))
+strategy_plot = merge(strategy_topintop, strategy_which)
+dygraph(strategy_plot)%>%
+  dyLegend(width = 300)
+#l = ncol(type_i)
+# payoffPlot = xts(strategy = )
+plot(cumsum(strategy_i)-cumsum(benchmark_i), type = "l", ylab = "payoff difference")
+#lines(cumsum(benchmark_i), type = "l", col = "blue")
+abline(h = 0, col = "grey", lty = 3)
